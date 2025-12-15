@@ -88,8 +88,8 @@ with st.sidebar:
     st.header("Setări")
     chunk_size = st.slider("Lungimea unei bucăți (caractere)", 
                            min_value=2000, 
-                           max_value=15000, 
-                           value=6000, 
+                           max_value=20000, 
+                           value=20000, 
                            step=500,
                            help="6000-8000 este ideal pentru ChatGPT 4. Pentru GPT-3.5 folosește mai puțin.")
     
