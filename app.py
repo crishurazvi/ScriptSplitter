@@ -1,20 +1,3 @@
-Am înțeles. Vom crea o interfață Glassmorphism (Glass UI) – un stil modern, minimalist, bazat pe transparență, blur și fundaluri întunecate, fără emoji-uri "jucăușe".
-
-Ce aduce nou această versiune:
-
-Glassmorphism CSS: Elementele par că plutesc pe un fundal abstract, având efect de sticlă mată (blur).
-
-Configurator Prompt (Sidebar): Promptul nu mai este hardcodat static. Acum ai input-uri și checkbox-uri în stânga pentru a altera "Personalitatea" AI-ului, Limba sau regulile de formatare, care se reflectă direct în promptul final.
-
-Flux de lucru: Input -> Buton Generare -> Carduri jos.
-
-Carduri: Fiecare bucată de text este izolată vizual într-un "card" de sticlă, conținând blocul de cod cu butonul de copy integrat.
-
-code
-Python
-download
-content_copy
-expand_less
 import streamlit as st
 import re
 
