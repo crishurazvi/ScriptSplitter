@@ -268,7 +268,7 @@ else:
     if total == 0:
         st.warning("Nu am putut genera părți. Verifică dacă transcriptul are conținut după curățare.")
     else:
-        nav_c1, nav_c2, nav_c3, nav_c4 = st.columns([1, 1, 1, 6])
+        nav_c1, nav_c2, nav_c3, nav_c4 = st.columns([1, 1, 2, 6])
 
         with nav_c1:
             if st.button("⬅️ Înapoi", use_container_width=True, disabled=st.session_state["current_step"] <= 1):
