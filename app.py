@@ -128,10 +128,16 @@ def build_prompt(idx: int, total: int, chunk: str) -> str:
 
 
 def copy_button(text_to_copy: str, label: str, dom_id: str) -> None:
+    """
+    Renders a compact HTML button that copies `text_to_copy` to clipboard via JS.
+    Note: st.components.v1.html() does NOT accept `key` in many Streamlit versions.
+    """
     payload = json.dumps(text_to_copy)
+    safe_id = re.sub(r"[^a-zA-Z0-9_\-]", "_", dom_id)
+
     html = f"""
-    <div style="display:flex;align-items:center;gap:10px;">
-      <button id="{dom_id}"
+    <div style="display:flex;align-items:center;gap:10px;margin:0;padding:0;">
+      <button id="{safe_id}"
               style="
                 border:1px solid #d0d0d0;
                 padding:8px 12px;
@@ -139,32 +145,37 @@ def copy_button(text_to_copy: str, label: str, dom_id: str) -> None:
                 background:white;
                 cursor:pointer;
                 font-size:14px;
+                line-height:1;
               ">
         {label}
       </button>
-      <span id="{dom_id}_msg" style="font-size:12px;color:#666;"></span>
+      <span id="{safe_id}_msg" style="font-size:12px;color:#666;line-height:1;"></span>
     </div>
 
     <script>
-      const btn = document.getElementById("{dom_id}");
-      const msg = document.getElementById("{dom_id}_msg");
-      const originalText = btn.innerText;
+      (function() {{
+        const btn = document.getElementById("{safe_id}");
+        const msg = document.getElementById("{safe_id}_msg");
+        if (!btn) return;
 
-      btn.addEventListener("click", async () => {{
-        try {{
-          await navigator.clipboard.writeText({payload});
-          btn.innerText = "✅ Copiat!";
-          msg.textContent = "";
-          setTimeout(() => {{
-            btn.innerText = originalText;
-          }}, 1200);
-        }} catch (e) {{
-          msg.textContent = "Nu am putut copia automat. Deschide promptul și folosește icon-ul Copy.";
-        }}
-      }});
+        const originalText = btn.innerText;
+
+        btn.addEventListener("click", async () => {{
+          try {{
+            await navigator.clipboard.writeText({payload});
+            btn.innerText = "✅ Copiat!";
+            msg.textContent = "";
+            setTimeout(() => {{
+              btn.innerText = originalText;
+            }}, 1200);
+          }} catch (e) {{
+            msg.textContent = "Copiere automată indisponibilă aici. Deschide promptul și folosește icon-ul Copy.";
+          }}
+        }});
+      }})();
     </script>
     """
-    components.html(html, height=45, key=f"cmp_{dom_id}")
+    components.html(html, height=50)
 
 
 # Sidebar
@@ -178,6 +189,7 @@ with st.sidebar:
         step=500,
         help="6000-8000 este ideal pentru ChatGPT 4. Pentru GPT-3.5 folosește mai puțin.",
     )
+    show_cleaned_toggle = st.toggle("Arată textul (opțional)", value=False)
     st.info(
         "Pași de utilizare:\n"
         "1. Lipește textul brut în zona principală.\n"
@@ -186,7 +198,7 @@ with st.sidebar:
         "4. Apoi mergi la PASUL 2, PASUL 3, etc."
     )
 
-# Init session state
+# Session state
 st.session_state.setdefault("last_digest", "")
 st.session_state.setdefault("generated", False)
 st.session_state.setdefault("cleaned", "")
@@ -207,6 +219,7 @@ raw_text = st.text_area("Lipește Transcriptul Brut Aici:", height=300)
 raw_text_stripped = raw_text.strip()
 current_digest = _digest(raw_text_stripped) if raw_text_stripped else ""
 
+# Auto-reset generation when input changes
 if current_digest and current_digest != st.session_state["last_digest"]:
     st.session_state["last_digest"] = current_digest
     st.session_state["generated"] = False
@@ -255,7 +268,7 @@ else:
     if total == 0:
         st.warning("Nu am putut genera părți. Verifică dacă transcriptul are conținut după curățare.")
     else:
-        nav_c1, nav_c2, nav_c3, nav_c4 = st.columns([1, 1, 2, 4])
+        nav_c1, nav_c2, nav_c3, nav_c4 = st.columns([1, 1, 2, 6])
 
         with nav_c1:
             if st.button("⬅️ Înapoi", use_container_width=True, disabled=st.session_state["current_step"] <= 1):
@@ -268,13 +281,7 @@ else:
                 st.rerun()
 
         with nav_c3:
-            step = st.number_input(
-                "Partea",
-                min_value=1,
-                max_value=total,
-                value=int(st.session_state["current_step"]),
-                step=1,
-            )
+            step = st.number_input("Partea", min_value=1, max_value=total, value=int(st.session_state["current_step"]), step=1)
             if int(step) != int(st.session_state["current_step"]):
                 st.session_state["current_step"] = int(step)
                 st.rerun()
@@ -284,10 +291,15 @@ else:
         chunk = chunks[idx - 1]
 
         st.subheader(f"📝 PASUL {idx} (Copiază acest prompt în AI)")
-        copy_button(prompt, "📋 Copy prompt", dom_id=f"copy_prompt_{idx}_{st.session_state['last_digest'][:8]}")
 
-        with st.expander("Vezi promptul (opțional)", expanded=False):
-            st.code(prompt, language="text")
+        copy_button(
+            prompt,
+            "📋 Copy prompt",
+            dom_id=f"copy_prompt_{idx}_{st.session_state['last_digest'][:8]}",
+        )
 
-        with st.expander(f"Vezi textul brut curățat pentru Partea {idx} (opțional)", expanded=False):
-            st.write(chunk)
+        if show_cleaned_toggle:
+            with st.expander("Vezi promptul (opțional)", expanded=False):
+                st.code(prompt, language="text")
+            with st.expander(f"Vezi textul brut curățat pentru Partea {idx} (opțional)", expanded=False):
+                st.write(chunk)
