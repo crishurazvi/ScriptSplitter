@@ -281,7 +281,7 @@ else:
                 st.rerun()
 
         with nav_c3:
-            step = st.number_input("Partea", min_value=1, max_value=total, value=int(st.session_state["current_step"]), step=1)
+            step = st.number_input("", min_value=1, max_value=total, value=int(st.session_state["current_step"]), step=1)
             if int(step) != int(st.session_state["current_step"]):
                 st.session_state["current_step"] = int(step)
                 st.rerun()
