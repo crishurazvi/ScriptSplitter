@@ -1,115 +1,118 @@
+Am înțeles. Vom crea o interfață Glassmorphism (Glass UI) – un stil modern, minimalist, bazat pe transparență, blur și fundaluri întunecate, fără emoji-uri "jucăușe".
+
+Ce aduce nou această versiune:
+
+Glassmorphism CSS: Elementele par că plutesc pe un fundal abstract, având efect de sticlă mată (blur).
+
+Configurator Prompt (Sidebar): Promptul nu mai este hardcodat static. Acum ai input-uri și checkbox-uri în stânga pentru a altera "Personalitatea" AI-ului, Limba sau regulile de formatare, care se reflectă direct în promptul final.
+
+Flux de lucru: Input -> Buton Generare -> Carduri jos.
+
+Carduri: Fiecare bucată de text este izolată vizual într-un "card" de sticlă, conținând blocul de cod cu butonul de copy integrat.
+
+code
+Python
+download
+content_copy
+expand_less
 import streamlit as st
 import re
 
-# --- CONFIGURARE PAGINĂ & CSS MODERN ---
-st.set_page_config(page_title="Medical AI Splitter", layout="wide", page_icon="🧬")
+# --- CONFIGURARE PAGINĂ ---
+st.set_page_config(page_title="Procesare Transcript", layout="wide")
 
-# CSS Custom pentru un aspect "SaaS Modern"
+# --- DESIGN: GLASSMORPHISM & ULTRA MODERN CSS ---
 st.markdown("""
 <style>
-    /* Import font modern */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
-    
-    html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif;
+    /* 1. FUNDAL GLOBAL - Dark Gradient */
+    .stApp {
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #172554 100%);
+        color: #e2e8f0;
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     }
 
-    /* Titlu cu Gradient */
-    .title-text {
-        background: linear-gradient(90deg, #4b6cb7 0%, #182848 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        font-weight: 800;
-        font-size: 3rem;
-        padding-bottom: 20px;
+    /* 2. SIDEBAR - Glass Effect */
+    section[data-testid="stSidebar"] {
+        background-color: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(12px);
+        border-right: 1px solid rgba(255, 255, 255, 0.1);
     }
 
-    /* Stil container principal */
+    /* 3. INPUT TEXTAREA - Minimalist */
     .stTextArea textarea {
-        background-color: #f8f9fa;
-        border: 1px solid #e9ecef;
-        border-radius: 12px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        transition: all 0.3s ease;
+        background-color: rgba(30, 41, 59, 0.7) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        color: #f1f5f9 !important;
+        border-radius: 8px;
+        backdrop-filter: blur(5px);
     }
     .stTextArea textarea:focus {
-        border-color: #4b6cb7;
-        box-shadow: 0 0 0 3px rgba(75, 108, 183, 0.2);
+        border-color: #3b82f6 !important;
+        box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
     }
 
-    /* Stil Sidebar */
-    [data-testid="stSidebar"] {
-        background-color: #f4f6f9;
-        border-right: 1px solid #e1e4e8;
+    /* 4. CARDS (Output Containers) */
+    .glass-card {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 20px;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        transition: transform 0.2s ease;
+    }
+    .glass-card:hover {
+        border-color: rgba(59, 130, 246, 0.4);
     }
 
-    /* Card-uri pentru Output (Expander) */
-    .streamlit-expanderHeader {
-        background-color: #ffffff;
-        border: 1px solid #e0e0e0;
-        border-radius: 10px;
-        padding: 1rem;
+    /* 5. BUTON GENERARE */
+    div.stButton > button {
+        background: linear-gradient(90deg, #2563eb, #1d4ed8);
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 6px;
         font-weight: 600;
-        color: #1f2937;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        letter-spacing: 0.5px;
+        width: 100%;
+        transition: all 0.3s ease;
     }
-    .streamlit-expanderHeader:hover {
-        background-color: #f0f4f8;
-        color: #4b6cb7;
+    div.stButton > button:hover {
+        background: linear-gradient(90deg, #1d4ed8, #1e40af);
+        box-shadow: 0 0 15px rgba(37, 99, 235, 0.5);
+    }
+
+    /* 6. CODE BLOCK */
+    .stCode {
+        background-color: rgba(0, 0, 0, 0.3) !important;
+        border-radius: 8px;
+    }
+
+    /* Titluri */
+    h1, h2, h3 {
+        color: #f8fafc;
+        font-weight: 300;
     }
     
-    /* Blocul de cod */
-    .stCode {
-        border-radius: 8px;
-        overflow: hidden;
+    /* Etichete input */
+    label {
+        color: #94a3b8 !important;
+        font-size: 0.85rem !important;
+        text-transform: uppercase;
+        letter-spacing: 1px;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# --- CONFIGURAȚIA PROMPTULUI ORIGINAL (LOGICA PĂSTRATĂ) ---
-SYSTEM_INSTRUCTIONS = """
-ROLE:
-You are an expert medical content analyst, academic editor, and medical educator.
-
-OBJECTIVE:
-Transform the provided raw transcript into a structured, high-quality medical course chapter,
-as if it were part of a professional medical textbook or a PDF course handout.
-
-LANGUAGE:
-Keep the output strictly in the ORIGINAL LANGUAGE of the transcript (French).
-
-CORE TASKS:
-Remove noise (repetitions, hesitations, irrelevant digressions).
-Preserve ALL medically relevant details, mechanisms, examples, and clinical reasoning.
-Reorganize the content into a clear didactic structure optimized for learning.
-Do NOT summarize excessively or oversimplify.
-
-STRUCTURE REQUIREMENTS:
-Organize the content as a textbook chapter using:
-- Title of the chapter (If this is the first part)
-- Logical sections and subsections (H2 / H3 style)
-- Use bullet points ONLY when they improve clarity
-- Bold key concepts, definitions, and take-home ideas
-
-PEDAGOGICAL OPTIMIZATION:
-- Explicitly define important terms when first introduced
-- Highlight cause-effect relationships and clinical reasoning
-
-CONSTRAINTS:
-- Do NOT invent information not present in the transcript
-- Do NOT reference guidelines not mentioned
-- No emojis, no casual tone.
-- FINAL OUTPUT: A clean, structured, textbook-level medical course chapter.
-"""
+# --- FUNCȚII LOGICE (Păstrate) ---
 
 def clean_transcript(text):
-    """Elimină timestamp-urile de tip (2:58:54) și spațiile inutile."""
     text = re.sub(r'\(\d{1,2}:\d{2}(?::\d{2})?\)', '', text)
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
-def split_text_into_chunks(text, max_chars=8000):
-    """Împarte textul în bucăți care nu depășesc max_chars."""
+def split_text_into_chunks(text, max_chars):
     words = text.split(' ')
     chunks = []
     current_chunk = []
@@ -120,121 +123,137 @@ def split_text_into_chunks(text, max_chars=8000):
             chunks.append(" ".join(current_chunk))
             current_chunk = []
             current_length = 0
-        
         current_chunk.append(word)
         current_length += len(word) + 1
 
     if current_chunk:
         chunks.append(" ".join(current_chunk))
-    
     return chunks
 
-# --- SIDEBAR MODERN ---
+# --- SIDEBAR: CONFIGURARE PROMPT ---
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/3063/3063822.png", width=60)
-    st.markdown("### ⚙️ Setări Procesare")
+    st.markdown("### CONFIGURARE PROMPT")
     st.markdown("---")
-    chunk_size = st.slider(
-        "Lungime Chunk (caractere)", 
-        min_value=2000, 
-        max_value=20000, 
-        value=15000, 
-        step=500,
-        help="Ajustează dimensiunea textului trimis la AI."
+    
+    # 1. Configurare Rol
+    st.markdown("<small>ROL AI</small>", unsafe_allow_html=True)
+    role_input = st.text_input(
+        "Defineste cine este AI-ul", 
+        value="Expert medical content analyst, academic editor, and medical educator",
+        label_visibility="collapsed"
     )
-    st.markdown("---")
-    st.info("**Sfat:** Pentru GPT-4 poți folosi valori mari (12k-15k). Pentru GPT-3.5 limitează la 6k.")
 
-# --- LAYOUT PRINCIPAL ---
+    # 2. Limbă și Ton
+    st.markdown("<br><small>LIMBA & STIL</small>", unsafe_allow_html=True)
+    target_lang = st.selectbox("Limba Output", ["ORIGINAL LANGUAGE (French)", "English", "Romanian"], label_visibility="collapsed")
+    
+    # 3. Parametri Tehnici (Slider)
+    st.markdown("<br><small>DIMENSIUNE CHUNK (CARACTERE)</small>", unsafe_allow_html=True)
+    chunk_size = st.slider("Selecteaza lungimea", 2000, 25000, 15000, label_visibility="collapsed")
+    
+    # 4. Constrângeri (Checkboxes)
+    st.markdown("<br><small>REGULI</small>", unsafe_allow_html=True)
+    no_fluff = st.checkbox("Remove noise & hesitations", value=True)
+    textbook_style = st.checkbox("Format Textbook (H2/H3)", value=True)
+    bold_keys = st.checkbox("Bold key concepts", value=True)
+    no_invent = st.checkbox("Do NOT invent info", value=True)
 
-# Header Custom
-st.markdown('<h1 class="title-text">Medical Transcript AI Splitter</h1>', unsafe_allow_html=True)
-st.markdown("Transformă transcripturi lungi în prompt-uri perfecte pentru ChatGPT/Claude, gata de copiat.")
+# --- CONSTRUIREA PROMPTULUI MASTER DIN GUI ---
+# Construim dinamic string-ul de instrucțiuni pe baza input-urilor din stânga
+constraints_list = []
+if no_fluff: constraints_list.append("- Remove noise (repetitions, hesitations, irrelevant digressions).")
+if textbook_style: constraints_list.append("- Organize content as a textbook chapter (H2/H3).")
+if bold_keys: constraints_list.append("- Bold key concepts and definitions.")
+if no_invent: constraints_list.append("- Do NOT invent information not present in the transcript.")
 
-# Zona de Input
-col1, col2 = st.columns([3, 1])
-with col1:
-    raw_text = st.text_area("✍️ Introdu textul brut aici", height=200, placeholder="Lipește transcriptul lung aici...")
+DYNAMIC_SYSTEM_INSTRUCTIONS = f"""
+ROLE:
+{role_input}
 
-# Zona de Status (partea dreapta)
-with col2:
-    st.markdown("<br>", unsafe_allow_html=True) # Spacer
-    if raw_text:
-        cleaned_len = len(clean_transcript(raw_text))
-        st.metric(label="Caractere Totale", value=f"{cleaned_len:,}")
-        st.success("Text detectat!")
-    else:
-        st.info("Aștept input...")
+OBJECTIVE:
+Transform the raw transcript into a structured course chapter.
 
-# --- PROCESARE ȘI AFIȘARE ---
+LANGUAGE:
+Keep the output strictly in: {target_lang}.
 
-if raw_text:
-    # 1. Procesare
+CORE TASKS:
+{chr(10).join(constraints_list)}
+
+STRUCTURE REQUIREMENTS:
+- Use clear didactic structure.
+- Define important terms.
+- Highlight cause-effect relationships.
+- No emojis, professional tone.
+"""
+
+# --- ZONA PRINCIPALĂ ---
+
+st.title("GENERATOR PROMPTURI")
+st.markdown("<p style='color: #94a3b8; margin-bottom: 30px;'>Lipeste transcriptul, genereaza bucatile si copiaza-le in AI.</p>", unsafe_allow_html=True)
+
+# Container Input
+input_container = st.container()
+with input_container:
+    raw_text = st.text_area("TRANSCRIPT", height=300, placeholder="Lipeste textul aici...", label_visibility="hidden")
+    
+    col_btn, col_empty = st.columns([1, 3])
+    with col_btn:
+        generate_clicked = st.button("GENEREAZA CHUNKS")
+
+# --- ZONA OUTPUT (CARDURI) ---
+
+if generate_clicked and raw_text:
+    # Procesare
     cleaned_text = clean_transcript(raw_text)
     chunks = split_text_into_chunks(cleaned_text, max_chars=chunk_size)
     
-    st.divider()
+    st.markdown("---")
+    st.markdown(f"### REZULTATE ({len(chunks)} PĂRȚI)")
     
-    # Header secțiune rezultate
-    st.markdown(f"### 🚀 Prompt-uri Generate ({len(chunks)} părți)")
-    st.markdown("Deschide fiecare secțiune de mai jos și copiază codul folosind butonul din colțul dreapta-sus al blocului negru.")
-
-    # 2. Generare Interfață Compactă
+    # Iterare și afișare carduri
     for i, chunk in enumerate(chunks):
         part_num = i + 1
-        is_first = (i == 0)
         
-        # Logică construire prompt (neschimbată)
-        if is_first:
-            final_prompt = f"""{SYSTEM_INSTRUCTIONS}
+        # Generare Prompt Specific
+        if i == 0:
+            prompt_content = f"""{DYNAMIC_SYSTEM_INSTRUCTIONS}
 
 INPUT TEXT (PART {part_num}/{len(chunks)}):
 {chunk}
 
 INSTRUCTIONS FOR THIS PART:
-Please adhere strictly to the ROLE and STRUCTURE defined above. 
-Start writing the Textbook Chapter based on this text.
+Start writing the Textbook Chapter based on this text. Adhere strictly to the ROLE and STRUCTURE.
 """
-            label_icon = "1️⃣"
-            label_text = "START: Primul Prompt (Instrucțiuni Master)"
-            color_border = "border: 2px solid #4b6cb7;"
+            card_title = "PROMPT START (PARTEA 1)"
+            border_style = "border-left: 4px solid #3b82f6;" # Albastru pentru start
         else:
-            final_prompt = f"""{SYSTEM_INSTRUCTIONS}
+            prompt_content = f"""{DYNAMIC_SYSTEM_INSTRUCTIONS}
 
 CONTEXT:
-You are currently writing a medical textbook chapter based on a transcript.
-You have already processed the previous parts.
+You are continuing a chapter. Do not create a new title.
 
 INPUT TEXT (PART {part_num}/{len(chunks)}):
 {chunk}
 
 INSTRUCTIONS FOR THIS PART:
-**CONTINUE** the textbook chapter from where you left off.
-- Do NOT create a new Title or a new Introduction.
-- Maintain the same formatting (H2/H3, bolding) as the previous part.
-- Treat this text as a direct continuation of the previous segment.
+CONTINUE the textbook chapter from where you left off. Maintain formatting.
 """
-            label_icon = f"🔄"
-            label_text = f"CONTINUARE: Partea {part_num} din {len(chunks)}"
+            card_title = f"PROMPT CONTINUARE (PARTEA {part_num})"
+            border_style = "border-left: 4px solid #64748b;" # Gri pentru continuare
 
-        # 3. Afișare Compactă (Expander)
-        # Folosim expander pentru a nu ocupa loc. 
-        # Expanded=True doar pentru primul ca să fie evident.
-        with st.expander(f"{label_icon} {label_text}", expanded=is_first):
-            st.markdown("Copiază textul de mai jos:")
-            # st.code are buton de copy automat în dreapta sus
-            st.code(final_prompt, language="text")
-            
-            # Opțiune de verificare text sursă (subtil)
-            with st.popover("🔍 Vezi fragmentul original curățat"):
-                st.caption(f"Fragment din textul sursă (Partea {part_num})")
-                st.text(chunk[:1000] + "...") 
+        # Renderizare HTML Card Container
+        st.markdown(f"""
+        <div class="glass-card" style="{border_style}">
+            <h4 style="margin: 0 0 10px 0; color: white;">{card_title}</h4>
+            <p style="font-size: 0.8rem; color: #94a3b8;">Click pe iconita de copy din dreapta-sus a blocului de cod.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Afișare cod (care are buton de copy nativ)
+        st.code(prompt_content, language="text")
+        
+        # Spacer mic între carduri
+        st.write("") 
 
-else:
-    # Placeholder vizual când nu e text
-    st.markdown("")
-    st.markdown("""
-    <div style="text-align: center; color: #888; margin-top: 50px;">
-        <h3>👈 Începe prin a lipi textul în stânga sus</h3>
-    </div>
-    """, unsafe_allow_html=True)
+elif generate_clicked and not raw_text:
+    st.error("Te rog lipeste un text inainte de a genera.")
