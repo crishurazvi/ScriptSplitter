@@ -1,6 +1,10 @@
 # app.py
+import hashlib
+import json
 import re
+
 import streamlit as st
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Medical Transcript Splitter", layout="wide")
 
@@ -40,6 +44,10 @@ CONSTRAINTS:
 """
 
 
+def _digest(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 def clean_transcript(text: str) -> str:
     """
     - Remove timestamps like (2:58:54) or (12:00)
@@ -51,18 +59,15 @@ def clean_transcript(text: str) -> str:
 
     timestamp_pattern = r"\(\d{1,2}:\d{2}(?::\d{2})?\)"
     text = re.sub(timestamp_pattern, " ", text)
-
-    # Collapse all whitespace (spaces, tabs, newlines) into single spaces
     text = re.sub(r"\s+", " ", text)
-
     return text.strip()
 
 
 def split_text_into_chunks(text: str, max_chars: int) -> list[str]:
     """
     Split by words and build chunks that do not exceed max_chars.
-    Simple, robust behavior:
-    - Works even if there are very long "words" by slicing them.
+    Robust behavior:
+    - If a single "word" exceeds max_chars, it is sliced.
     """
     if not text:
         return []
@@ -78,13 +83,10 @@ def split_text_into_chunks(text: str, max_chars: int) -> list[str]:
             current = ""
 
     for w in words:
-        # If a single word exceeds max_chars, slice it
         if len(w) > max_chars:
             flush_current()
-            start = 0
-            while start < len(w):
+            for start in range(0, len(w), max_chars):
                 chunks.append(w[start : start + max_chars])
-                start += max_chars
             continue
 
         candidate = w if not current else f"{current} {w}"
@@ -96,6 +98,73 @@ def split_text_into_chunks(text: str, max_chars: int) -> list[str]:
 
     flush_current()
     return chunks
+
+
+def build_prompt(idx: int, total: int, chunk: str) -> str:
+    if idx == 1:
+        return (
+            f"{SYSTEM_INSTRUCTIONS}\n\n"
+            f"INPUT TEXT (PART {idx}/{total}):\n"
+            f"{chunk}\n\n"
+            "INSTRUCTIONS FOR THIS PART:\n"
+            "- Start writing the textbook chapter now based ONLY on this part.\n"
+            "- Use H2/H3 headings, bold key terms, and keep a clean textbook style.\n"
+            "- Do not invent information.\n"
+            "- If the content feels incomplete, stop naturally and continue in the next parts.\n"
+        )
+    return (
+        f"{SYSTEM_INSTRUCTIONS}\n\n"
+        "CONTEXT:\n"
+        "We are continuing the SAME textbook chapter. Previous parts have already been processed.\n\n"
+        f"INPUT TEXT (PART {idx}/{total}):\n"
+        f"{chunk}\n\n"
+        "INSTRUCTIONS FOR THIS PART:\n"
+        "- CONTINUE from where you left off.\n"
+        "- Do NOT create a new Title or a new Introduction.\n"
+        "- Maintain the SAME formatting (H2/H3, bolding, bullet rules).\n"
+        "- Treat this as a direct continuation of the same chapter.\n"
+        "- Do not repeat already-covered content unless needed for clarity.\n"
+    )
+
+
+def copy_button(text_to_copy: str, label: str, dom_id: str) -> None:
+    payload = json.dumps(text_to_copy)
+    html = f"""
+    <div style="display:flex;align-items:center;gap:10px;">
+      <button id="{dom_id}"
+              style="
+                border:1px solid #d0d0d0;
+                padding:8px 12px;
+                border-radius:10px;
+                background:white;
+                cursor:pointer;
+                font-size:14px;
+              ">
+        {label}
+      </button>
+      <span id="{dom_id}_msg" style="font-size:12px;color:#666;"></span>
+    </div>
+
+    <script>
+      const btn = document.getElementById("{dom_id}");
+      const msg = document.getElementById("{dom_id}_msg");
+      const originalText = btn.innerText;
+
+      btn.addEventListener("click", async () => {{
+        try {{
+          await navigator.clipboard.writeText({payload});
+          btn.innerText = "✅ Copiat!";
+          msg.textContent = "";
+          setTimeout(() => {{
+            btn.innerText = originalText;
+          }}, 1200);
+        }} catch (e) {{
+          msg.textContent = "Nu am putut copia automat. Deschide promptul și folosește icon-ul Copy.";
+        }}
+      }});
+    </script>
+    """
+    components.html(html, height=45, key=f"cmp_{dom_id}")
 
 
 # Sidebar
@@ -112,10 +181,18 @@ with st.sidebar:
     st.info(
         "Pași de utilizare:\n"
         "1. Lipește textul brut în zona principală.\n"
-        "2. Aplicația curăță timestamp-urile și generează prompturi pe bucăți.\n"
+        "2. Apasă butonul de generare.\n"
         "3. Copiază PASUL 1 în AI și procesează.\n"
-        "4. Când termini, copiază PASUL 2, apoi PASUL 3, etc."
+        "4. Apoi mergi la PASUL 2, PASUL 3, etc."
     )
+
+# Init session state
+st.session_state.setdefault("last_digest", "")
+st.session_state.setdefault("generated", False)
+st.session_state.setdefault("cleaned", "")
+st.session_state.setdefault("chunks", [])
+st.session_state.setdefault("prompts", [])
+st.session_state.setdefault("current_step", 1)
 
 # Main page
 st.title("📚 Medical Transcript to Textbook AI Splitter")
@@ -127,45 +204,90 @@ st.write(
 
 raw_text = st.text_area("Lipește Transcriptul Brut Aici:", height=300)
 
-if raw_text.strip():
-    cleaned = clean_transcript(raw_text)
+raw_text_stripped = raw_text.strip()
+current_digest = _digest(raw_text_stripped) if raw_text_stripped else ""
+
+if current_digest and current_digest != st.session_state["last_digest"]:
+    st.session_state["last_digest"] = current_digest
+    st.session_state["generated"] = False
+    st.session_state["cleaned"] = ""
+    st.session_state["chunks"] = []
+    st.session_state["prompts"] = []
+    st.session_state["current_step"] = 1
+
+btn_col1, btn_col2, _ = st.columns([1, 1, 3])
+with btn_col1:
+    generate_clicked = st.button("🚀 Generează chunk-uri", type="primary", use_container_width=True)
+with btn_col2:
+    reset_clicked = st.button("🧹 Reset", use_container_width=True)
+
+if reset_clicked:
+    st.session_state["generated"] = False
+    st.session_state["cleaned"] = ""
+    st.session_state["chunks"] = []
+    st.session_state["prompts"] = []
+    st.session_state["current_step"] = 1
+    st.rerun()
+
+if generate_clicked:
+    cleaned = clean_transcript(raw_text_stripped)
     chunks = split_text_into_chunks(cleaned, chunk_size)
+    prompts = [build_prompt(i + 1, len(chunks), ch) for i, ch in enumerate(chunks)]
+
+    st.session_state["cleaned"] = cleaned
+    st.session_state["chunks"] = chunks
+    st.session_state["prompts"] = prompts
+    st.session_state["generated"] = True
+    st.session_state["current_step"] = 1
+    st.rerun()
+
+if not raw_text_stripped:
+    st.warning("Aștept transcriptul...")
+elif not st.session_state["generated"]:
+    st.info("Text introdus. Apasă „Generează chunk-uri” ca să obții prompturile.")
+else:
+    chunks = st.session_state["chunks"]
+    prompts = st.session_state["prompts"]
     total = len(chunks)
 
     st.write(f"### 🎉 Rezultat: Textul a fost împărțit în {total} părți.")
 
-    for idx, chunk in enumerate(chunks, start=1):
+    if total == 0:
+        st.warning("Nu am putut genera părți. Verifică dacă transcriptul are conținut după curățare.")
+    else:
+        nav_c1, nav_c2, nav_c3, nav_c4 = st.columns([1, 1, 2, 4])
+
+        with nav_c1:
+            if st.button("⬅️ Înapoi", use_container_width=True, disabled=st.session_state["current_step"] <= 1):
+                st.session_state["current_step"] = max(1, st.session_state["current_step"] - 1)
+                st.rerun()
+
+        with nav_c2:
+            if st.button("➡️ Înainte", use_container_width=True, disabled=st.session_state["current_step"] >= total):
+                st.session_state["current_step"] = min(total, st.session_state["current_step"] + 1)
+                st.rerun()
+
+        with nav_c3:
+            step = st.number_input(
+                "Partea",
+                min_value=1,
+                max_value=total,
+                value=int(st.session_state["current_step"]),
+                step=1,
+            )
+            if int(step) != int(st.session_state["current_step"]):
+                st.session_state["current_step"] = int(step)
+                st.rerun()
+
+        idx = int(st.session_state["current_step"])
+        prompt = prompts[idx - 1]
+        chunk = chunks[idx - 1]
+
         st.subheader(f"📝 PASUL {idx} (Copiază acest prompt în AI)")
+        copy_button(prompt, "📋 Copy prompt", dom_id=f"copy_prompt_{idx}_{st.session_state['last_digest'][:8]}")
 
-        if idx == 1:
-            final_prompt = (
-                f"{SYSTEM_INSTRUCTIONS}\n\n"
-                f"INPUT TEXT (PART {idx}/{total}):\n"
-                f"{chunk}\n\n"
-                "INSTRUCTIONS FOR THIS PART:\n"
-                "- Start writing the textbook chapter now based ONLY on this part.\n"
-                "- Use H2/H3 headings, bold key terms, and keep a clean textbook style.\n"
-                "- Do not invent information.\n"
-                "- If the content feels incomplete, stop naturally and continue in the next parts.\n"
-            )
-        else:
-            final_prompt = (
-                f"{SYSTEM_INSTRUCTIONS}\n\n"
-                "CONTEXT:\n"
-                "We are continuing the SAME textbook chapter. Previous parts have already been processed.\n\n"
-                f"INPUT TEXT (PART {idx}/{total}):\n"
-                f"{chunk}\n\n"
-                "INSTRUCTIONS FOR THIS PART:\n"
-                "- CONTINUE from where you left off.\n"
-                "- Do NOT create a new Title or a new Introduction.\n"
-                "- Maintain the SAME formatting (H2/H3, bolding, bullet rules).\n"
-                "- Treat this as a direct continuation of the same chapter.\n"
-                "- Do not repeat already-covered content unless needed for clarity.\n"
-            )
+        with st.expander("Vezi promptul (opțional)", expanded=False):
+            st.code(prompt, language="text")
 
-        st.code(final_prompt, language="text")
-
-        with st.expander(f"Vezi textul brut curățat pentru Partea {idx}"):
+        with st.expander(f"Vezi textul brut curățat pentru Partea {idx} (opțional)", expanded=False):
             st.write(chunk)
-else:
-    st.warning("Aștept transcriptul...")
