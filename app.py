@@ -1,20 +1,3 @@
-Iată codul final. Am combinat exact funcționalitatea scriptului tău medical (logica de split, regex, instrucțiunile master vs. continuare) cu designul vizual NeuroSplit (tema dark, glassmorphism, culori neon, layout pe 2 coloane).
-
-Ce am făcut:
-
-Design NeuroSplit: Am portat CSS-ul din exemplul tău HTML în Streamlit.
-
-Layout: În stânga ai setările (Slider pentru lungime chunk), în dreapta input-ul de text.
-
-Output Grid: Rezultatele apar jos sub formă de carduri elegante, pe 2 coloane, pentru a nu da scroll la infinit.
-
-Funcționalitate: Am păstrat intacte funcțiile clean_transcript, split_text_into_chunks și logica de construire a prompturilor (Master vs Context).
-
-code
-Python
-download
-content_copy
-expand_less
 import streamlit as st
 import re
 
