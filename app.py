@@ -159,10 +159,10 @@ def copy_button(text_to_copy: str, label: str, dom_id: str) -> None:
         btn.addEventListener("click", async () => {{
           try {{
             await navigator.clipboard.writeText({payload});
-            msg.textContent = "✅ Copiat!";
+            msg.textContent = "Copiato!";
             setTimeout(() => {{
               msg.textContent = "";
-            }}, 2000);
+            }}, 2000000);
           }} catch (e) {{
             msg.style.color = "red";
             msg.textContent = "Eroare copy. Deschide manual.";
