@@ -1,4 +1,3 @@
-# app.py
 import hashlib
 import json
 import re
@@ -7,6 +6,8 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Medical Transcript Splitter", layout="wide")
+
+# --- CONFIGURARE ȘI LOGICĂ ---
 
 SYSTEM_INSTRUCTIONS = """
 ROLE:
@@ -43,31 +44,23 @@ CONSTRAINTS:
 - FINAL OUTPUT: A clean, structured, textbook-level medical course chapter.
 """
 
-
 def _digest(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
-
 def clean_transcript(text: str) -> str:
     """
-    - Remove timestamps like (2:58:54) or (12:00)
-    - Collapse whitespace/newlines into single spaces
-    - Strip ends
+    Elimină timestamp-urile și spațiile inutile.
     """
     if not text:
         return ""
-
     timestamp_pattern = r"\(\d{1,2}:\d{2}(?::\d{2})?\)"
     text = re.sub(timestamp_pattern, " ", text)
     text = re.sub(r"\s+", " ", text)
     return text.strip()
 
-
 def split_text_into_chunks(text: str, max_chars: int) -> list[str]:
     """
-    Split by words and build chunks that do not exceed max_chars.
-    Robust behavior:
-    - If a single "word" exceeds max_chars, it is sliced.
+    Împarte textul în bucăți care nu depășesc max_chars, fără a tăia cuvintele la jumătate.
     """
     if not text:
         return []
@@ -99,7 +92,6 @@ def split_text_into_chunks(text: str, max_chars: int) -> list[str]:
     flush_current()
     return chunks
 
-
 def build_prompt(idx: int, total: int, chunk: str) -> str:
     if idx == 1:
         return (
@@ -126,11 +118,9 @@ def build_prompt(idx: int, total: int, chunk: str) -> str:
         "- Do not repeat already-covered content unless needed for clarity.\n"
     )
 
-
 def copy_button(text_to_copy: str, label: str, dom_id: str) -> None:
     """
-    Renders a compact HTML button that copies `text_to_copy` to clipboard via JS.
-    Note: st.components.v1.html() does NOT accept `key` in many Streamlit versions.
+    Renders a compact HTML button that copies text via JS.
     """
     payload = json.dumps(text_to_copy)
     safe_id = re.sub(r"[^a-zA-Z0-9_\-]", "_", dom_id)
@@ -140,16 +130,22 @@ def copy_button(text_to_copy: str, label: str, dom_id: str) -> None:
       <button id="{safe_id}"
               style="
                 border:1px solid #d0d0d0;
-                padding:8px 12px;
-                border-radius:10px;
-                background:white;
+                padding:8px 16px;
+                border-radius:8px;
+                background:#f0f2f6;
+                color:#31333F;
+                font-weight:600;
                 cursor:pointer;
                 font-size:14px;
-                line-height:1;
-              ">
+                line-height:1.5;
+                transition: background 0.2s;
+              "
+              onmouseover="this.style.background='#e0e2e6'"
+              onmouseout="this.style.background='#f0f2f6'"
+      >
         {label}
       </button>
-      <span id="{safe_id}_msg" style="font-size:12px;color:#666;line-height:1;"></span>
+      <span id="{safe_id}_msg" style="font-size:13px;color:#00cc66;font-weight:bold;line-height:1;"></span>
     </div>
 
     <script>
@@ -163,13 +159,13 @@ def copy_button(text_to_copy: str, label: str, dom_id: str) -> None:
         btn.addEventListener("click", async () => {{
           try {{
             await navigator.clipboard.writeText({payload});
-            btn.innerText = "✅ Copiat!";
-            msg.textContent = "";
+            msg.textContent = "✅ Copiat!";
             setTimeout(() => {{
-              btn.innerText = originalText;
-            }}, 1200);
+              msg.textContent = "";
+            }}, 2000);
           }} catch (e) {{
-            msg.textContent = "Copiere automată indisponibilă aici. Deschide promptul și folosește icon-ul Copy.";
+            msg.style.color = "red";
+            msg.textContent = "Eroare copy. Deschide manual.";
           }}
         }});
       }})();
@@ -177,6 +173,8 @@ def copy_button(text_to_copy: str, label: str, dom_id: str) -> None:
     """
     components.html(html, height=50)
 
+
+# --- INTERFAȚA ---
 
 # Sidebar
 with st.sidebar:
@@ -187,34 +185,27 @@ with st.sidebar:
         max_value=20000,
         value=6000,
         step=500,
-        help="6000-8000 este ideal pentru ChatGPT 4. Pentru GPT-3.5 folosește mai puțin.",
+        help="6000-8000 este ideal pentru ChatGPT 4.",
     )
-    show_cleaned_toggle = st.toggle("Arată textul (opțional)", value=False)
+    show_cleaned_toggle = st.toggle("Arată textul promptului (Debugging)", value=False)
     st.info(
-        "Pași de utilizare:\n"
-        "1. Lipește textul brut în zona principală.\n"
-        "2. Apasă butonul de generare.\n"
-        "3. Copiază PASUL 1 în AI și procesează.\n"
-        "4. Apoi mergi la PASUL 2, PASUL 3, etc."
+        "Instrucțiuni:\n"
+        "1. Lipește textul.\n"
+        "2. Apasă 'Generează'.\n"
+        "3. Copiază pe rând fiecare 'CHUNK' și dă-l lui ChatGPT."
     )
 
-# Session state
+# Session state initialization
 st.session_state.setdefault("last_digest", "")
 st.session_state.setdefault("generated", False)
-st.session_state.setdefault("cleaned", "")
 st.session_state.setdefault("chunks", [])
 st.session_state.setdefault("prompts", [])
-st.session_state.setdefault("current_step", 1)
 
-# Main page
-st.title("📚 Medical Transcript to Textbook AI Splitter")
-st.write(
-    "Această aplicație curăță timestamp-urile dintr-un transcript medical, îl împarte în bucăți "
-    "și generează prompturi gata de copiat, optimizate pentru ChatGPT/Claude, astfel încât să "
-    "procesezi textul pas cu pas într-un capitol tip manual."
-)
+# Main page layout
+st.title("📚 Medical Transcript Splitter (List View)")
+st.write("Transformă transcriptul în prompturi secvențiale, afișate unul sub altul.")
 
-raw_text = st.text_area("Lipește Transcriptul Brut Aici:", height=300)
+raw_text = st.text_area("Lipește Transcriptul Brut Aici:", height=200)
 
 raw_text_stripped = raw_text.strip()
 current_digest = _digest(raw_text_stripped) if raw_text_stripped else ""
@@ -223,83 +214,61 @@ current_digest = _digest(raw_text_stripped) if raw_text_stripped else ""
 if current_digest and current_digest != st.session_state["last_digest"]:
     st.session_state["last_digest"] = current_digest
     st.session_state["generated"] = False
-    st.session_state["cleaned"] = ""
     st.session_state["chunks"] = []
     st.session_state["prompts"] = []
-    st.session_state["current_step"] = 1
 
-btn_col1, btn_col2, _ = st.columns([1, 1, 3])
-with btn_col1:
-    generate_clicked = st.button("🚀 Generează chunk-uri", type="primary", use_container_width=True)
-with btn_col2:
-    reset_clicked = st.button("🧹 Reset", use_container_width=True)
-
-if reset_clicked:
-    st.session_state["generated"] = False
-    st.session_state["cleaned"] = ""
-    st.session_state["chunks"] = []
-    st.session_state["prompts"] = []
-    st.session_state["current_step"] = 1
-    st.rerun()
+col1, col2 = st.columns([1, 4])
+with col1:
+    generate_clicked = st.button("🚀 Generează", type="primary", use_container_width=True)
+with col2:
+    if st.button("🧹 Reset", use_container_width=False):
+        st.session_state["generated"] = False
+        st.session_state["chunks"] = []
+        st.session_state["prompts"] = []
+        st.rerun()
 
 if generate_clicked:
     cleaned = clean_transcript(raw_text_stripped)
     chunks = split_text_into_chunks(cleaned, chunk_size)
     prompts = [build_prompt(i + 1, len(chunks), ch) for i, ch in enumerate(chunks)]
 
-    st.session_state["cleaned"] = cleaned
     st.session_state["chunks"] = chunks
     st.session_state["prompts"] = prompts
     st.session_state["generated"] = True
-    st.session_state["current_step"] = 1
     st.rerun()
+
+# --- AFIȘAREA REZULTATELOR (LISTA) ---
 
 if not raw_text_stripped:
     st.warning("Aștept transcriptul...")
 elif not st.session_state["generated"]:
-    st.info("Text introdus. Apasă „Generează chunk-uri” ca să obții prompturile.")
+    st.info("Transcript detectat. Apasă butonul pentru a genera prompturile.")
 else:
-    chunks = st.session_state["chunks"]
     prompts = st.session_state["prompts"]
-    total = len(chunks)
+    chunks = st.session_state["chunks"]
+    total = len(prompts)
 
-    st.write(f"### 🎉 Rezultat: Textul a fost împărțit în {total} părți.")
+    st.success(f"Text împărțit în {total} părți. Copiază-le pe rând mai jos:")
+    st.divider()
 
-    if total == 0:
-        st.warning("Nu am putut genera părți. Verifică dacă transcriptul are conținut după curățare.")
-    else:
-        nav_c1, nav_c2, nav_c3, nav_c4 = st.columns([1, 1, 2, 6])
+    # Iterăm prin toate prompturile și le afișăm unul sub altul
+    for i, prompt in enumerate(prompts):
+        idx = i + 1
+        
+        # Container vizual pentru fiecare pas
+        with st.container():
+            st.subheader(f"🔹 CHUNK {idx} din {total}")
+            
+            # Afișăm butonul de copiere
+            copy_button(
+                text_to_copy=prompt,
+                label=f"📋 CLICK AICI PENTRU A COPIA CHUNK {idx}",
+                dom_id=f"copy_btn_{idx}_{st.session_state['last_digest'][:6]}"
+            )
 
-        with nav_c1:
-            if st.button("⬅️ Înapoi", use_container_width=True, disabled=st.session_state["current_step"] <= 1):
-                st.session_state["current_step"] = max(1, st.session_state["current_step"] - 1)
-                st.rerun()
-
-        with nav_c2:
-            if st.button("➡️ Înainte", use_container_width=True, disabled=st.session_state["current_step"] >= total):
-                st.session_state["current_step"] = min(total, st.session_state["current_step"] + 1)
-                st.rerun()
-
-        with nav_c3:
-            step = st.number_input("", min_value=1, max_value=total, value=int(st.session_state["current_step"]), step=1)
-            if int(step) != int(st.session_state["current_step"]):
-                st.session_state["current_step"] = int(step)
-                st.rerun()
-
-        idx = int(st.session_state["current_step"])
-        prompt = prompts[idx - 1]
-        chunk = chunks[idx - 1]
-
-        st.subheader(f"📝 PASUL {idx} (Copiază acest prompt în AI)")
-
-        copy_button(
-            prompt,
-            "📋 Copy prompt",
-            dom_id=f"copy_prompt_{idx}_{st.session_state['last_digest'][:8]}",
-        )
-
-        if show_cleaned_toggle:
-            with st.expander("Vezi promptul (opțional)", expanded=False):
-                st.code(prompt, language="text")
-            with st.expander(f"Vezi textul brut curățat pentru Partea {idx} (opțional)", expanded=False):
-                st.write(chunk)
+            # Opțional: afișăm textul dacă utilizatorul a bifat toggle-ul
+            if show_cleaned_toggle:
+                with st.expander(f"Vezi conținutul promptului {idx} (Opțional)"):
+                    st.code(prompt, language="text")
+            
+            st.divider() # Linie despărțitoare între pași
